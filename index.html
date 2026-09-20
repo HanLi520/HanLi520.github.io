@@ -18,7 +18,6 @@
                      radial-gradient(circle at 85% 80%, #2a1020 0, transparent 40%);
     min-height: 100vh; overflow-x: hidden;
   }
-  
   /* 樱花特效 */
   .sakura {
     position: fixed; top: -10px; z-index: 0; pointer-events: none;
@@ -29,11 +28,9 @@
     0% { transform: translateY(0) rotate(0deg); opacity: 1; }
     100% { transform: translateY(100vh) rotate(360deg); opacity: 0; }
   }
-
   .page { display: none; position: relative; z-index: 1; animation: fadeIn 0.4s ease; }
   .page.active { display: block; }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
-
   header { text-align: center; padding: 40px 20px 20px; }
   .avatar-box {
     width: 100px; height: 100px; margin: 0 auto 15px;
@@ -43,7 +40,6 @@
   .avatar-box svg { width: 100%; height: 100%; }
   h1 { font-size: 26px; color: var(--pink); margin-bottom: 5px; }
   .tagline { color: var(--muted); font-size: 14px; }
-
   section { max-width: 600px; margin: 0 auto; padding: 15px; }
   .card {
     background: var(--card); border: 1px solid var(--line); border-radius: 20px;
@@ -52,25 +48,34 @@
   .card h2 { font-size: 18px; color: var(--pink); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
 
   /* 音乐播放器 */
-  .music-player { display: flex; align-items: center; gap: 15px; background: rgba(255,105,180,0.1); padding: 12px; border-radius: 15px; border: 1px solid var(--glass-border); }
+  .music-player { display: flex; align-items: center; gap: 12px; background: rgba(255,105,180,0.1); padding: 12px; border-radius: 15px; border: 1px solid var(--glass-border); }
   .music-player audio { display: none; }
-  .play-btn {
-    width: 45px; height: 45px; border-radius: 50%; background: var(--pink); border: none;
-    color: #fff; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0; box-shadow: 0 4px 12px rgba(255,105,180,0.4);
+  .music-controls { display: flex; gap: 6px; }
+  .music-btn {
+    width: 40px; height: 40px; border-radius: 50%; background: var(--pink); border: none;
+    color: #fff; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 10px rgba(255,105,180,0.3);
   }
+  .music-btn:active { transform: scale(0.92); }
   .music-info { flex: 1; overflow: hidden; }
   .music-info .title { font-size: 14px; font-weight: bold; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .music-info .artist { font-size: 12px; color: var(--muted); }
-
-  /* 相册 */
-  .gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-  .gallery div {
-    aspect-ratio: 1/1; background: var(--glass); border-radius: 12px;
-    display: flex; align-items: center; justify-content: center; font-size: 40px;
-    border: 1px solid var(--glass-border); transition: 0.2s; cursor: pointer;
+  .music-select {
+    width: 100%; margin-top: 10px; padding: 8px; border-radius: 10px;
+    background: var(--card); color: var(--text); border: 1px solid var(--line);
+    font-size: 14px; outline: none;
   }
-  .gallery div:active { transform: scale(0.95); }
+
+  /* 十二生肖 */
+  .zodiac-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .zodiac-item {
+    aspect-ratio: 1/1; background: var(--glass); border-radius: 12px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    border: 1px solid var(--glass-border); transition: 0.2s; cursor: pointer;
+    font-size: 32px; gap: 4px;
+  }
+  .zodiac-item .name { font-size: 12px; color: var(--muted); }
+  .zodiac-item:active { transform: scale(0.95); }
 
   /* 游戏 */
   .game-board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; max-width: 340px; margin: 0 auto; }
@@ -83,10 +88,7 @@
   .memory-card.flipped { background: var(--pink); transform: rotateY(180deg); }
   .memory-card.matched { background: rgba(255,105,180,0.4); border-color: var(--pink); }
   .game-controls { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; }
-  .restart-btn {
-    padding: 8px 16px; border-radius: 99px; background: var(--pink); color: #fff;
-    border: none; font-size: 13px; cursor: pointer; font-weight: bold;
-  }
+  .restart-btn { padding: 8px 16px; border-radius: 99px; background: var(--pink); color: #fff; border: none; font-size: 13px; cursor: pointer; font-weight: bold; }
 
   /* 底栏 */
   .tab-bar {
@@ -102,7 +104,6 @@
 </head>
 <body>
 
-<!-- 个人主页 -->
 <div id="page-home" class="page active">
   <header>
     <div class="avatar-box">
@@ -126,31 +127,44 @@
     <p class="tagline">欢迎来到我的小天地</p>
   </header>
   <section>
+    <!-- 音乐播放器 -->
     <div class="card">
       <h2>🎵 每日推荐</h2>
       <div class="music-player">
-        <button class="play-btn" id="playBtn" onclick="toggleMusic()">▶</button>
-        <div class="music-info">
-          <div class="title">粉色回忆 (点击播放)</div>
-          <div class="artist">韩立的后宫专属BGM</div>
+        <div class="music-controls">
+          <button class="music-btn" onclick="prevSong()">⏮</button>
+          <button class="music-btn" id="playBtn" onclick="toggleMusic()">▶</button>
+          <button class="music-btn" onclick="nextSong()">⏭</button>
         </div>
-        <audio id="bgMusic" loop>
-          <!-- 这里可以替换成你自己的音乐链接 -->
-          <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
-        </audio>
+        <div class="music-info">
+          <div class="title" id="songTitle">准备就绪</div>
+          <div class="artist" id="songArtist">点击播放按钮</div>
+        </div>
       </div>
+      <select class="music-select" id="musicSelect" onchange="selectSong(this.value)"></select>
+      <audio id="bgMusic" loop></audio>
     </div>
+    <!-- 十二生肖 -->
     <div class="card">
-      <h2>📸 我的相册</h2>
-      <div class="gallery">
-        <div>🌸</div><div>🐻</div><div>🎀</div>
-        <div>🍭</div><div>🌈</div><div>🍿</div>
+      <h2>🌟 十二生肖</h2>
+      <div class="zodiac-grid">
+        <div class="zodiac-item">🐭<span class="name">鼠</span></div>
+        <div class="zodiac-item">🐮<span class="name">牛</span></div>
+        <div class="zodiac-item">🐯<span class="name">虎</span></div>
+        <div class="zodiac-item">🐰<span class="name">兔</span></div>
+        <div class="zodiac-item">🐲<span class="name">龙</span></div>
+        <div class="zodiac-item">🐍<span class="name">蛇</span></div>
+        <div class="zodiac-item">🐴<span class="name">马</span></div>
+        <div class="zodiac-item">🐑<span class="name">羊</span></div>
+        <div class="zodiac-item">🐵<span class="name">猴</span></div>
+        <div class="zodiac-item">🐔<span class="name">鸡</span></div>
+        <div class="zodiac-item">🐶<span class="name">狗</span></div>
+        <div class="zodiac-item">🐷<span class="name">猪</span></div>
       </div>
     </div>
   </section>
 </div>
 
-<!-- 小游戏 -->
 <div id="page-game" class="page">
   <header>
     <h1>🧠 记忆翻牌</h1>
@@ -167,7 +181,6 @@
   </section>
 </div>
 
-<!-- 底栏 -->
 <div class="tab-bar">
   <div class="tab-item active" data-page="home" onclick="switchTab('home', this)">
     <span class="icon">🏠</span><span>主页</span>
@@ -176,6 +189,7 @@
     <span class="icon">🎮</span><span>游戏</span>
   </div>
 </div>
+
 <script>
 // ================== 1. 页面切换 ==================
 function switchTab(pageName, element) {
@@ -185,7 +199,7 @@ function switchTab(pageName, element) {
   if (element) element.classList.add('active');
 }
 
-// ================== 2. 樱花飘落特效 ==================
+// ================== 2. 樱花特效 ==================
 function createSakura() {
   const sakura = document.createElement('div');
   sakura.className = 'sakura';
@@ -198,21 +212,75 @@ function createSakura() {
   document.body.appendChild(sakura);
   setTimeout(() => { sakura.remove(); }, 10000);
 }
-setInterval(createSakura, 300); // 每300毫秒飘落一朵
+setInterval(createSakura, 300);
 
-// ================== 3. 音乐播放器 ==================
+// ================== 3. 音乐播放列表 ==================
+// 你的3首音乐已填入，你可以修改 title 的文本来自定义歌曲名字
+const playlist = [
+  { title: "我的音乐 1", artist: "未知", url: "https://hanli520.github.io/5_6334776616400460370.mp3" },
+  { title: "我的音乐 2", artist: "未知", url: "https://hanli520.github.io/5_6073492341077837047.mp3" },
+  { title: "我的音乐 3", artist: "未知", url: "https://hanli520.github.io/5_6316300105179734366.mp3" }
+];
+
+let currentSongIndex = 0;
 const bgMusic = document.getElementById('bgMusic');
 const playBtn = document.getElementById('playBtn');
+const songTitle = document.getElementById('songTitle');
+const songArtist = document.getElementById('songArtist');
+const musicSelect = document.getElementById('musicSelect');
 let isPlaying = false;
 
+function initMusicPlayer() {
+  musicSelect.innerHTML = '';
+  playlist.forEach((song, index) => {
+    const option = document.createElement('option');
+    option.value = index;
+    option.text = song.title;
+    musicSelect.appendChild(option);
+  });
+  loadSong(0);
+}
+
+function loadSong(index) {
+  currentSongIndex = index;
+  const song = playlist[index];
+  bgMusic.src = song.url;
+  songTitle.innerText = song.title;
+  songArtist.innerText = song.artist;
+  musicSelect.value = index;
+  isPlaying = false;
+  playBtn.innerHTML = '▶';
+}
+
 function toggleMusic() {
+  if (!bgMusic.src) return;
   if (isPlaying) {
     bgMusic.pause(); playBtn.innerHTML = '▶';
   } else {
-    bgMusic.play().catch(e => alert('音乐加载失败，可能是网络问题，不影响其他功能哦～'));
+    bgMusic.play().catch(e => alert('音乐加载失败，请确认链接可正常访问'));
     playBtn.innerHTML = '⏸';
   }
   isPlaying = !isPlaying;
+}
+
+function nextSong() {
+  let nextIndex = (currentSongIndex + 1) % playlist.length;
+  loadSong(nextIndex);
+  bgMusic.play().catch(e => alert('播放失败'));
+  playBtn.innerHTML = '⏸'; isPlaying = true;
+}
+
+function prevSong() {
+  let prevIndex = (currentSongIndex - 1 + playlist.length) % playlist.length;
+  loadSong(prevIndex);
+  bgMusic.play().catch(e => alert('播放失败'));
+  playBtn.innerHTML = '⏸'; isPlaying = true;
+}
+
+function selectSong(index) {
+  loadSong(parseInt(index));
+  bgMusic.play().catch(e => alert('播放失败'));
+  playBtn.innerHTML = '⏸'; isPlaying = true;
 }
 
 // ================== 4. 记忆翻牌游戏 ==================
@@ -226,7 +294,7 @@ let lockBoard = false;
 function initGame() {
   const board = document.getElementById('gameBoard');
   board.innerHTML = '';
-  cards = [...emojis, ...emojis].sort(() => Math.random() - 0.5); // 打乱
+  cards = [...emojis, ...emojis].sort(() => Math.random() - 0.5);
   flippedCards = []; matchedPairs = 0; moves = 0;
   document.getElementById('moveCount').innerText = moves;
   lockBoard = false;
@@ -243,7 +311,6 @@ function initGame() {
 
 function flipCard(card) {
   if (lockBoard || card.classList.contains('flipped') || card.classList.contains('matched')) return;
-  
   card.classList.add('flipped');
   card.innerText = card.dataset.emoji;
   flippedCards.push(card);
@@ -276,8 +343,11 @@ function checkMatch() {
   }
 }
 
-// 初始化游戏
-initGame();
+// ================== 5. 初始化 ==================
+window.onload = function() {
+  initMusicPlayer();
+  initGame();
+};
 </script>
 </body>
 </html>
