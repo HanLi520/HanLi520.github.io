@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>韩立的后宫 🎀</title>
-<!-- 引入国内 CDN 的 Supabase 库，避免被墙 -->
 <script src="https://cdn.bootcdn.net/ajax/libs/supabase-js/2.45.4/supabase.min.js"></script>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
@@ -47,7 +46,6 @@
 </head>
 <body>
 
-<!-- 记账 -->
 <div id="page-account" class="page active">
   <h1>📝 记账本</h1>
   <p class="tagline">记录每一笔收支</p>
@@ -79,7 +77,6 @@
   </div>
 </div>
 
-<!-- 聊天 -->
 <div id="page-chat" class="page">
   <h1>💬 聊天室</h1>
   <p class="tagline">分享你的心情和图片（跨设备同步）</p>
@@ -96,7 +93,6 @@
   </div>
 </div>
 
-<!-- 我的 -->
 <div id="page-profile" class="page">
   <h1>👤 我的</h1>
   <p class="tagline">个人主页</p>
@@ -122,7 +118,6 @@
   </div>
 </div>
 
-<!-- 底栏 -->
 <div class="tab-bar" id="tabBar">
   <div class="tab-item active" data-tab="account" onclick="switchTab('account', this)">记账</div>
   <div class="tab-item" data-tab="chat" onclick="switchTab('chat', this)">聊天</div>
@@ -130,7 +125,16 @@
 </div>
 
 <script>
-// ================== 1. 页面切换（绝对优先，不受网络影响） ==================
+// ================== 核心防卡死超时机制 ==================
+// 给所有网络请求加一个 5 秒超时，避免断网时网页卡死
+function withTimeout(promise, ms = 5000) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('网络超时')), ms))
+  ]);
+}
+
+// ================== 1. 页面切换 ==================
 window.switchTab = function(tabName, element) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + tabName).classList.add('active');
@@ -151,22 +155,20 @@ document.querySelector('body').addEventListener('touchend', e => {
   }
 }, {passive: true});
 
-// ================== 2. 初始化 Supabase（带防崩溃保护） ==================
+// ================== 2. 初始化 Supabase ==================
 let supabase = null;
 try {
   const supabaseUrl = 'https://snzuhtakhmvexwangvhn.supabase.co';
   const supabaseKey = 'sb_publishable_iPEwpOxizCaU0ig0ssLGLQ_3ysepmGi'; 
   if (window.supabase) {
     supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-  } else {
-    console.warn("Supabase 库未加载成功，请检查网络");
   }
-} catch (e) { console.error("Supabase 初始化失败", e); }
+} catch (e) { console.error("初始化失败", e); }
 
 let myName = localStorage.getItem('myChatName') || '用户' + Math.floor(Math.random() * 1000);
 localStorage.setItem('myChatName', myName);
 
-// ================== 3. 记账功能（云同步） ==================
+// ================== 3. 记账功能 ==================
 document.getElementById('recordDate').value = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
 window.updatePlaceholder = function() {
@@ -174,14 +176,23 @@ window.updatePlaceholder = function() {
 }
 
 window.addRecord = async function() {
-  if (!supabase) { alert('网络未连接，请切换网络（Wi-Fi/流量）后刷新页面再试'); return; }
+  if (!supabase) { alert('网络组件未加载，请刷新重试'); return; }
   const dateStr = document.getElementById('recordDate').value;
   const item = document.getElementById('recordItem').value.trim();
   const amount = parseFloat(document.getElementById('recordAmount').value);
   const type = document.querySelector('input[name="recordType"]:checked').value;
   if (!dateStr || !item || isNaN(amount) || amount <= 0) { alert('请填写完整！'); return; }
+  
   const date = dateStr.replace('T', ' ').slice(0, 16);
-  await supabase.from('records').insert([{ date, item, amount, type }]);
+  try {
+    // 使用超时包装，防止卡死
+    await withTimeout(supabase.from('records').insert([{ date, item, amount, type }]));
+    alert('记账成功！');
+  } catch (err) {
+    alert('网络连接超时，请检查网络（切换Wi-Fi/流量）后重试');
+    return;
+  }
+  
   document.getElementById('recordItem').value = ''; document.getElementById('recordAmount').value = '';
   window.loadRecords();
 }
@@ -189,33 +200,35 @@ window.addRecord = async function() {
 window.deleteRecord = async function(id) {
   if (!supabase) return;
   if (!confirm('确定删除？')) return;
-  await supabase.from('records').delete().eq('id', id);
+  try { await withTimeout(supabase.from('records').delete().eq('id', id)); } catch(e) { alert('网络超时，删除失败'); return; }
   window.loadRecords();
 }
 
 window.loadRecords = async function() {
   if (!supabase) return;
-  const { data: records, error } = await supabase.from('records').select('*').order('date', { ascending: false });
-  if (error) return;
-  let tExp = 0, tInc = 0; const mMap = {};
-  records.forEach(r => {
-    if (r.type === 'expense') tExp += r.amount; else tInc += r.amount;
-    const m = r.date.slice(0, 7); if (!mMap[m]) mMap[m] = { e: 0, i: 0 }; mMap[m][r.type === 'expense' ? 'e' : 'i'] += r.amount;
-  });
-  document.getElementById('totalExpense').innerText = tExp.toFixed(2);
-  document.getElementById('totalIncome').innerText = tInc.toFixed(2);
-  const mL = document.getElementById('monthlyList'); mL.innerHTML = '';
-  const sortedM = Object.keys(mMap).sort().reverse();
-  if (sortedM.length === 0) mL.innerHTML = '<div style="font-size:13px;color:#888;text-align:center;">暂无记录</div>';
-  else sortedM.forEach(m => { mL.innerHTML += '<div style="display:flex;justify-content:space-between;font-size:13px;background:#252525;padding:8px 12px;border-radius:8px;margin-bottom:5px;"><span>' + m + '</span><span>支出 ¥' + mMap[m].e.toFixed(2) + ' / 收入 ¥' + mMap[m].i.toFixed(2) + '</span></div>'; });
-  const rL = document.getElementById('recordList'); rL.innerHTML = '';
-  if (records.length === 0) rL.innerHTML = '<div style="text-align:center;color:#888;font-size:13px;">还没有记录哦～</div>';
-  else records.forEach(r => {
-    rL.innerHTML += '<div class="record-item"><div><b>' + r.item + '</b><br><small style="color:#888;">' + r.date + '</small></div><div><span class="amount ' + r.type + '">' + (r.type === 'expense' ? '-' : '+') + '¥' + r.amount.toFixed(2) + '</span><button class="del-btn" onclick="deleteRecord(' + r.id + ')">🗑️</button></div></div>';
-  });
+  try {
+    const { data: records, error } = await withTimeout(supabase.from('records').select('*').order('date', { ascending: false }));
+    if (error) return;
+    let tExp = 0, tInc = 0; const mMap = {};
+    records.forEach(r => {
+      if (r.type === 'expense') tExp += r.amount; else tInc += r.amount;
+      const m = r.date.slice(0, 7); if (!mMap[m]) mMap[m] = { e: 0, i: 0 }; mMap[m][r.type === 'expense' ? 'e' : 'i'] += r.amount;
+    });
+    document.getElementById('totalExpense').innerText = tExp.toFixed(2);
+    document.getElementById('totalIncome').innerText = tInc.toFixed(2);
+    const mL = document.getElementById('monthlyList'); mL.innerHTML = '';
+    const sortedM = Object.keys(mMap).sort().reverse();
+    if (sortedM.length === 0) mL.innerHTML = '<div style="font-size:13px;color:#888;text-align:center;">暂无记录</div>';
+    else sortedM.forEach(m => { mL.innerHTML += '<div style="display:flex;justify-content:space-between;font-size:13px;background:#252525;padding:8px 12px;border-radius:8px;margin-bottom:5px;"><span>' + m + '</span><span>支出 ¥' + mMap[m].e.toFixed(2) + ' / 收入 ¥' + mMap[m].i.toFixed(2) + '</span></div>'; });
+    const rL = document.getElementById('recordList'); rL.innerHTML = '';
+    if (records.length === 0) rL.innerHTML = '<div style="text-align:center;color:#888;font-size:13px;">还没有记录哦～</div>';
+    else records.forEach(r => {
+      rL.innerHTML += '<div class="record-item"><div><b>' + r.item + '</b><br><small style="color:#888;">' + r.date + '</small></div><div><span class="amount ' + r.type + '">' + (r.type === 'expense' ? '-' : '+') + '¥' + r.amount.toFixed(2) + '</span><button class="del-btn" onclick="deleteRecord(' + r.id + ')">🗑️</button></div></div>';
+    });
+  } catch(e) { console.warn('加载超时'); }
 }
 
-// ================== 4. 聊天功能（云同步） ==================
+// ================== 4. 聊天功能 ==================
 const chatInput = document.getElementById('chatInput');
 const actionBtn = document.getElementById('actionBtn');
 
@@ -230,19 +243,23 @@ window.handleAction = function() {
 }
 
 window.sendChatText = async function() {
-  if (!supabase) { alert('网络未连接，无法发送消息'); return; }
+  if (!supabase) { alert('网络组件未加载，请刷新重试'); return; }
   const text = chatInput.value.trim();
   if (!text) return;
   chatInput.value = ''; window.toggleSendBtn();
-  await supabase.from('messages').insert([{ content: text, username: myName }]);
+  try {
+    await withTimeout(supabase.from('messages').insert([{ content: text, username: myName }]));
+  } catch (err) {
+    alert('网络连接超时，发送失败，请检查网络');
+  }
 }
 
 window.sendChatImage = function(file) {
-  if (!supabase) { alert('网络未连接，无法发送图片'); return; }
+  if (!supabase) { alert('网络组件未加载，请刷新重试'); return; }
   if (!file) return;
   const reader = new FileReader();
   reader.onload = async (e) => {
-    await supabase.from('messages').insert([{ content: '<img src="' + e.target.result + '">', username: myName }]);
+    try { await withTimeout(supabase.from('messages').insert([{ content: '<img src="' + e.target.result + '">', username: myName }])); } catch(err) { alert('网络超时，图片发送失败'); }
   };
   reader.readAsDataURL(file);
 }
@@ -257,18 +274,22 @@ window.appendMessage = function(content, isMe) {
 
 window.loadChatHistory = async function() {
   if (!supabase) return;
-  const { data: msgs, error } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
-  if (error) return;
-  document.getElementById('chatMessages').innerHTML = '';
-  msgs.forEach(m => { window.appendMessage(m.content, m.username === myName); });
+  try {
+    const { data: msgs, error } = await withTimeout(supabase.from('messages').select('*').order('created_at', { ascending: true }));
+    if (error) return;
+    document.getElementById('chatMessages').innerHTML = '';
+    msgs.forEach(m => { window.appendMessage(m.content, m.username === myName); });
+  } catch(e) { console.warn('聊天记录加载超时'); }
 }
 
 window.subscribeToChat = function() {
   if (!supabase) return;
-  supabase.channel('public:messages').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
-    const m = payload.new;
-    if (m.username !== myName) { window.appendMessage(m.content, false); }
-  }).subscribe();
+  try {
+    supabase.channel('public:messages').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+      const m = payload.new;
+      if (m.username !== myName) { window.appendMessage(m.content, false); }
+    }).subscribe();
+  } catch(e) { console.warn('实时监听开启失败'); }
 }
 
 // ================== 5. 键盘弹出隐藏底栏 ==================
