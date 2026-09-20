@@ -4,19 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>韩立的后宫 🎀</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   body{font-family:"PingFang SC",sans-serif;background:#121212;color:#e0e0e0;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
-  
-  /* 页面独立显示，绝对互斥 */
   .page{display:none;flex:1;overflow-y:auto;padding:20px 15px 80px 15px;}
   .page.active{display:block;}
-  
   h1{color:#a855f7;font-size:24px;margin-bottom:5px;text-align:center;}
   .tagline{color:#888;font-size:13px;text-align:center;margin-bottom:20px;}
   .card{background:#1e1e1e;border:1px solid #333;border-radius:18px;padding:18px;margin-bottom:15px;}
   .sec-head h2{font-size:18px;color:#a855f7;margin-bottom:12px;}
-  
   input[type="text"], input[type="datetime-local"], input[type="number"] {
     width:100%;padding:10px;margin-bottom:10px;border:1px solid #444;border-radius:10px;font-size:14px;outline:none;background:#2a2a2a;color:#fff;
   }
@@ -32,8 +29,6 @@
   .record-item .amount.expense{color:#ff6b6b;}
   .record-item .amount.income{color:#51cf66;}
   .record-item .del-btn{background:none;border:none;color:#666;font-size:18px;cursor:pointer;}
-  
-  /* 聊天 */
   .chat-container{display:flex;flex-direction:column;height:60vh;background:#1e1e1e;border-radius:18px;overflow:hidden;border:1px solid #333;}
   .chat-messages{flex:1;overflow-y:auto;padding:15px;display:flex;flex-direction:column;gap:10px;}
   .msg{padding:10px 14px;border-radius:18px;font-size:14px;max-width:85%;word-break:break-word;background:#333;}
@@ -42,19 +37,14 @@
   .chat-input-area{display:flex;gap:6px;padding:10px;border-top:1px solid #333;background:#1e1e1e;align-items:center;}
   .chat-input-area input[type="text"]{flex:1;margin-bottom:0;border-radius:99px;}
   .chat-icon-btn{background:none;border:none;font-size:22px;color:#888;cursor:pointer;padding:0 5px;}
-  
-  /* 头像 */
   .avatar-box{width:100%;max-width:260px;margin:0 auto;border-radius:18px;overflow:hidden;border:2px solid #444;}
   .avatar-box svg{width:100%;height:100%;display:block;}
-  
-  /* 底栏 */
   .tab-bar{position:fixed;bottom:0;left:0;width:100%;height:56px;background:#0a0a0a;border-top:1px solid #222;display:flex;justify-content:space-around;align-items:center;z-index:999;}
   .tab-item{flex:1;height:100%;display:flex;align-items:center;justify-content:center;color:#666;font-size:15px;font-weight:500;cursor:pointer;}
   .tab-item.active{color:#a855f7;font-weight:800;font-size:17px;}
 </style>
 </head>
 <body>
-
 <!-- 记账 -->
 <div id="page-account" class="page active">
   <h1>📝 记账本</h1>
@@ -90,7 +80,7 @@
 <!-- 聊天 -->
 <div id="page-chat" class="page">
   <h1>💬 聊天室</h1>
-  <p class="tagline">分享你的心情和图片</p>
+  <p class="tagline">分享你的心情和图片（跨设备同步）</p>
   <div class="chat-container">
     <div class="chat-messages" id="chatMessages">
       <div class="msg">欢迎来到聊天室！发个表情或图片试试吧～ 🎀</div>
@@ -136,9 +126,8 @@
   <div class="tab-item" data-tab="chat" onclick="switchTab('chat', this)">聊天</div>
   <div class="tab-item" data-tab="profile" onclick="switchTab('profile', this)">我的</div>
 </div>
-
 <script>
-// 切换页面函数
+// ================== 1. 优先绑定页面切换逻辑（防止点击失效） ==================
 function switchTab(tabName, element) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + tabName).classList.add('active');
@@ -146,7 +135,6 @@ function switchTab(tabName, element) {
   if (element) element.classList.add('active');
 }
 
-// 左右滑动切换
 let startX = 0, endX = 0;
 document.querySelector('body').addEventListener('touchstart', e => { startX = e.changedTouches[0].screenX; }, {passive: true});
 document.querySelector('body').addEventListener('touchend', e => {
@@ -160,31 +148,60 @@ document.querySelector('body').addEventListener('touchend', e => {
   }
 }, {passive: true});
 
-// 记账逻辑
-let records = JSON.parse(localStorage.getItem('accountRecords')) || [];
+// ================== 2. 初始化 Supabase（带防卡死保护） ==================
+let supabase = null;
+try {
+  const supabaseUrl = 'https://snzuhtakhmvexwangvhn.supabase.co';
+  const supabaseKey = 'sb_publishable_iPEwpOxizCaU0ig0ssLGLQ_3ysepmGi'; 
+  if (window.supabase) {
+    supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+  } else {
+    console.warn("Supabase 库加载失败，请检查网络");
+  }
+} catch (e) {
+  console.error("Supabase 初始化失败", e);
+}
+
+// 为当前设备生成一个随机访客名字
+let myName = localStorage.getItem('myChatName');
+if (!myName) {
+  myName = '用户' + Math.floor(Math.random() * 1000);
+  localStorage.setItem('myChatName', myName);
+}
+
+// ================== 3. 记账功能 ==================
 document.getElementById('recordDate').value = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+
 function updatePlaceholder() {
   document.getElementById('recordItem').placeholder = document.getElementById('typeExpense').checked ? "输入用途（如：买菜）" : "输入来源（如：工资）";
 }
-function addRecord() {
+
+async function addRecord() {
+  if (!supabase) { alert('网络连接失败，无法保存到云端，请检查网络后刷新'); return; }
   const dateStr = document.getElementById('recordDate').value;
   const item = document.getElementById('recordItem').value.trim();
   const amount = parseFloat(document.getElementById('recordAmount').value);
   const type = document.querySelector('input[name="recordType"]:checked').value;
   if (!dateStr || !item || isNaN(amount) || amount <= 0) { alert('请填写完整！'); return; }
-  records.push({ id: Date.now(), date: dateStr.replace('T', ' ').slice(0, 16), item, amount, type });
-  records.sort((a, b) => b.date.localeCompare(a.date));
-  localStorage.setItem('accountRecords', JSON.stringify(records));
+  
+  const date = dateStr.replace('T', ' ').slice(0, 16);
+  await supabase.from('records').insert([{ date, item, amount, type }]);
+  
   document.getElementById('recordItem').value = ''; document.getElementById('recordAmount').value = '';
-  renderRecords();
+  loadRecords();
 }
-function deleteRecord(id) {
+
+async function deleteRecord(id) {
+  if (!supabase) return;
   if (!confirm('确定删除？')) return;
-  records = records.filter(r => r.id !== id);
-  localStorage.setItem('accountRecords', JSON.stringify(records));
-  renderRecords();
+  await supabase.from('records').delete().eq('id', id);
+  loadRecords();
 }
-function renderRecords() {
+
+async function loadRecords() {
+  if (!supabase) return;
+  const { data: records, error } = await supabase.from('records').select('*').order('date', { ascending: false });
+  if (error) return;
   let tExp = 0, tInc = 0; const mMap = {};
   records.forEach(r => {
     if (r.type === 'expense') tExp += r.amount; else tInc += r.amount;
@@ -192,10 +209,12 @@ function renderRecords() {
   });
   document.getElementById('totalExpense').innerText = tExp.toFixed(2);
   document.getElementById('totalIncome').innerText = tInc.toFixed(2);
+
   const mL = document.getElementById('monthlyList'); mL.innerHTML = '';
   const sortedM = Object.keys(mMap).sort().reverse();
   if (sortedM.length === 0) mL.innerHTML = '<div style="font-size:13px;color:#888;text-align:center;">暂无记录</div>';
   else sortedM.forEach(m => { mL.innerHTML += '<div style="display:flex;justify-content:space-between;font-size:13px;background:#252525;padding:8px 12px;border-radius:8px;margin-bottom:5px;"><span>' + m + '</span><span>支出 ¥' + mMap[m].e.toFixed(2) + ' / 收入 ¥' + mMap[m].i.toFixed(2) + '</span></div>'; });
+
   const rL = document.getElementById('recordList'); rL.innerHTML = '';
   if (records.length === 0) rL.innerHTML = '<div style="text-align:center;color:#888;font-size:13px;">还没有记录哦～</div>';
   else records.forEach(r => {
@@ -203,28 +222,38 @@ function renderRecords() {
   });
 }
 
-// 聊天逻辑
+// ================== 4. 聊天功能 ==================
+const chatInput = document.getElementById('chatInput');
+const actionBtn = document.getElementById('actionBtn');
+
 function toggleSendBtn() {
-  const btn = document.getElementById('actionBtn');
-  if (document.getElementById('chatInput').value.trim() !== '') { btn.innerHTML = '发送'; btn.style.color = '#a855f7'; btn.style.fontSize = '14px'; btn.style.fontWeight = 'bold'; }
-  else { btn.innerHTML = '🎤'; btn.style.color = '#888'; btn.style.fontSize = '22px'; btn.style.fontWeight = 'normal'; }
+  if (chatInput.value.trim() !== '') { actionBtn.innerHTML = '发送'; actionBtn.style.color = '#a855f7'; actionBtn.style.fontSize = '14px'; actionBtn.style.fontWeight = 'bold'; }
+  else { actionBtn.innerHTML = '🎤'; actionBtn.style.color = '#888'; actionBtn.style.fontSize = '22px'; actionBtn.style.fontWeight = 'normal'; }
 }
+
 function handleAction() {
-  if (document.getElementById('chatInput').value.trim() !== '') {
-    const txt = document.getElementById('chatInput').value.trim();
-    appendMessage(txt, true); document.getElementById('chatInput').value = ''; toggleSendBtn();
-    setTimeout(() => appendMessage('收到你的消息啦！🎀', false), 800);
-  } else { alert('语音功能需要后端支持～'); }
+  if (chatInput.value.trim() !== '') { sendChatText(); }
+  else { alert('语音功能需要后端支持～'); }
 }
+
+async function sendChatText() {
+  if (!supabase) { alert('网络连接失败，无法发送，请检查网络后刷新'); return; }
+  const text = chatInput.value.trim();
+  if (!text) return;
+  chatInput.value = ''; toggleSendBtn();
+  await supabase.from('messages').insert([{ content: text, username: myName }]);
+}
+
 function sendChatImage(file) {
+  if (!supabase) { alert('网络连接失败，无法发送图片'); return; }
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = (e) => {
-    appendMessage('<img src="' + e.target.result + '">', true);
-    setTimeout(() => appendMessage('图片收到，很好看！✨', false), 1000);
+  reader.onload = async (e) => {
+    await supabase.from('messages').insert([{ content: '<img src="' + e.target.result + '">', username: myName }]);
   };
   reader.readAsDataURL(file);
 }
+
 function appendMessage(content, isMe) {
   const div = document.createElement('div');
   div.className = 'msg ' + (isMe ? 'me' : '');
@@ -233,14 +262,41 @@ function appendMessage(content, isMe) {
   document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
 }
 
-// 键盘弹出隐藏底栏
+async function loadChatHistory() {
+  if (!supabase) return;
+  const { data: msgs, error } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
+  if (error) return;
+  document.getElementById('chatMessages').innerHTML = '';
+  msgs.forEach(m => {
+    const isMe = (m.username === myName);
+    appendMessage(m.content, isMe);
+  });
+}
+
+function subscribeToChat() {
+  if (!supabase) return;
+  supabase.channel('public:messages').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+    const m = payload.new;
+    const isMe = (m.username === myName);
+    if (!isMe) { appendMessage(m.content, false); }
+  }).subscribe();
+}
+
+// ================== 5. 键盘弹出隐藏底栏 ==================
 const tabBar = document.getElementById('tabBar');
 document.querySelectorAll('input').forEach(input => {
   input.addEventListener('focus', () => tabBar.style.display = 'none');
   input.addEventListener('blur', () => tabBar.style.display = 'flex');
 });
 
-window.onload = function() { renderRecords(); updatePlaceholder(); };
+// ================== 6. 初始化 ==================
+window.onload = function() {
+  loadRecords();
+  loadChatHistory();
+  subscribeToChat();
+  updatePlaceholder();
+}
 </script>
 </body>
 </html>
+
