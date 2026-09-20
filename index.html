@@ -18,7 +18,6 @@
                      radial-gradient(circle at 85% 80%, #2a1020 0, transparent 40%);
     min-height: 100vh; overflow-x: hidden;
   }
-  /* 樱花特效 */
   .sakura {
     position: fixed; top: -10px; z-index: 0; pointer-events: none;
     background: #ffb7c5; border-radius: 50% 0 50% 50%;
@@ -77,17 +76,18 @@
   .zodiac-item .name { font-size: 12px; color: var(--muted); }
   .zodiac-item:active { transform: scale(0.95); }
 
-  /* 游戏 */
-  .game-board { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; max-width: 340px; margin: 0 auto; }
-  .memory-card {
-    aspect-ratio: 1/1; background: var(--glass); border-radius: 12px;
-    display: flex; align-items: center; justify-content: center; font-size: 28px;
-    border: 1px solid var(--glass-border); cursor: pointer;
-    transition: transform 0.3s, background 0.3s; transform-style: preserve-3d;
+  /* 消消乐 */
+  .game-header { display: flex; justify-content: space-between; margin-bottom: 15px; font-size: 15px; align-items: center; }
+  .game-header b { color: var(--pink); font-size: 18px; }
+  .match3-board { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; max-width: 360px; margin: 0 auto; background: rgba(0,0,0,0.2); border-radius: 15px; padding: 6px; border: 1px solid var(--line); }
+  .match3-tile {
+    aspect-ratio: 1/1; background: rgba(255,255,255,0.05); border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; font-size: 22px;
+    cursor: pointer; transition: all 0.15s; user-select: none; border: 1px solid rgba(255,255,255,0.05);
   }
-  .memory-card.flipped { background: var(--pink); transform: rotateY(180deg); }
-  .memory-card.matched { background: rgba(255,105,180,0.4); border-color: var(--pink); }
-  .game-controls { display: flex; justify-content: space-between; margin-bottom: 10px; font-size: 14px; }
+  .match3-tile.selected { background: var(--pink); transform: scale(0.85); box-shadow: 0 0 10px var(--pink); }
+  .match3-tile.matched { animation: pop 0.3s forwards; }
+  @keyframes pop { to { transform: scale(0); opacity: 0; } }
   .restart-btn { padding: 8px 16px; border-radius: 99px; background: var(--pink); color: #fff; border: none; font-size: 13px; cursor: pointer; font-weight: bold; }
 
   /* 底栏 */
@@ -127,7 +127,6 @@
     <p class="tagline">欢迎来到我的小天地</p>
   </header>
   <section>
-    <!-- 音乐播放器 -->
     <div class="card">
       <h2>🎵 每日推荐</h2>
       <div class="music-player">
@@ -144,7 +143,6 @@
       <select class="music-select" id="musicSelect" onchange="selectSong(this.value)"></select>
       <audio id="bgMusic" loop></audio>
     </div>
-    <!-- 十二生肖 -->
     <div class="card">
       <h2>🌟 十二生肖</h2>
       <div class="zodiac-grid">
@@ -167,16 +165,16 @@
 
 <div id="page-game" class="page">
   <header>
-    <h1>🧠 记忆翻牌</h1>
-    <p class="tagline">找出相同的图案吧！</p>
+    <h1>🍬 消消乐</h1>
+    <p class="tagline">点击交换相邻的水果，三个连成线即可消除！</p>
   </header>
   <section>
     <div class="card">
-      <div class="game-controls">
-        <span>步数: <b id="moveCount">0</b></span>
-        <button class="restart-btn" onclick="initGame()">重新开始</button>
+      <div class="game-header">
+        <span>得分: <b id="m3Score">0</b></span>
+        <button class="restart-btn" onclick="initMatch3()">重新开始</button>
       </div>
-      <div class="game-board" id="gameBoard"></div>
+      <div class="match3-board" id="match3Board"></div>
     </div>
   </section>
 </div>
@@ -215,7 +213,6 @@ function createSakura() {
 setInterval(createSakura, 300);
 
 // ================== 3. 音乐播放列表 ==================
-// 你的3首音乐已填入，你可以修改 title 的文本来自定义歌曲名字
 const playlist = [
   { title: "我的音乐 1", artist: "未知", url: "https://hanli520.github.io/5_6334776616400460370.mp3" },
   { title: "我的音乐 2", artist: "未知", url: "https://hanli520.github.io/5_6073492341077837047.mp3" },
@@ -257,7 +254,7 @@ function toggleMusic() {
   if (isPlaying) {
     bgMusic.pause(); playBtn.innerHTML = '▶';
   } else {
-    bgMusic.play().catch(e => alert('音乐加载失败，请确认链接可正常访问'));
+    bgMusic.play().catch(e => alert('音乐加载失败，请检查链接'));
     playBtn.innerHTML = '⏸';
   }
   isPlaying = !isPlaying;
@@ -283,70 +280,194 @@ function selectSong(index) {
   playBtn.innerHTML = '⏸'; isPlaying = true;
 }
 
-// ================== 4. 记忆翻牌游戏 ==================
-const emojis = ['🎀', '🐻', '🍬', '⭐️', '🍭', '🍿', '🍦', '🎈'];
-let cards = [];
-let flippedCards = [];
-let matchedPairs = 0;
-let moves = 0;
-let lockBoard = false;
+// ================== 4. 消消乐游戏逻辑 ==================
+const ROWS = 6;
+const COLS = 6;
+const FRUITS = ['🍎', '🍊', '🍇', '🍓', '🍒', '🍋'];
+let m3Board = [];
+let m3Score = 0;
+let selectedTile = null;
+let isProcessing = false;
 
-function initGame() {
-  const board = document.getElementById('gameBoard');
-  board.innerHTML = '';
-  cards = [...emojis, ...emojis].sort(() => Math.random() - 0.5);
-  flippedCards = []; matchedPairs = 0; moves = 0;
-  document.getElementById('moveCount').innerText = moves;
-  lockBoard = false;
+function initMatch3() {
+  m3Board = [];
+  m3Score = 0;
+  selectedTile = null;
+  isProcessing = false;
+  document.getElementById('m3Score').innerText = '0';
+  
+  // 生成没有初始三连的棋盘
+  do {
+    m3Board = [];
+    for (let r = 0; r < ROWS; r++) {
+      let row = [];
+      for (let c = 0; c < COLS; c++) {
+        let fruit;
+        do {
+          fruit = FRUITS[Math.floor(Math.random() * FRUITS.length)];
+        } while (
+          (c >= 2 && row[c-1] === fruit && row[c-2] === fruit) ||
+          (r >= 2 && m3Board[r-1][c] === fruit && m3Board[r-2][c] === fruit)
+        );
+        row.push(fruit);
+      }
+      m3Board.push(row);
+    }
+  } while (checkMatches().length > 0);
 
-  cards.forEach((emoji, index) => {
-    const card = document.createElement('div');
-    card.className = 'memory-card';
-    card.dataset.emoji = emoji;
-    card.dataset.index = index;
-    card.onclick = () => flipCard(card);
-    board.appendChild(card);
-  });
+  renderBoard();
 }
 
-function flipCard(card) {
-  if (lockBoard || card.classList.contains('flipped') || card.classList.contains('matched')) return;
-  card.classList.add('flipped');
-  card.innerText = card.dataset.emoji;
-  flippedCards.push(card);
-
-  if (flippedCards.length === 2) {
-    moves++;
-    document.getElementById('moveCount').innerText = moves;
-    checkMatch();
+function renderBoard() {
+  const boardEl = document.getElementById('match3Board');
+  boardEl.innerHTML = '';
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const tile = document.createElement('div');
+      tile.className = 'match3-tile';
+      tile.innerText = m3Board[r][c];
+      tile.dataset.r = r;
+      tile.dataset.c = c;
+      tile.onclick = () => handleTileClick(r, c);
+      boardEl.appendChild(tile);
+    }
   }
 }
 
-function checkMatch() {
-  const [card1, card2] = flippedCards;
-  if (card1.dataset.emoji === card2.dataset.emoji) {
-    card1.classList.add('matched');
-    card2.classList.add('matched');
-    flippedCards = [];
-    matchedPairs++;
-    if (matchedPairs === emojis.length) {
-      setTimeout(() => alert('🎉 恭喜你！全部配对成功！用了 ' + moves + ' 步'), 300);
+function handleTileClick(r, c) {
+  if (isProcessing) return;
+  
+  if (selectedTile) {
+    const [sr, sc] = selectedTile;
+    // 点击同一个取消
+    if (sr === r && sc === c) {
+      selectedTile = null;
+      renderBoard();
+      return;
+    }
+    // 判断是否相邻
+    if (Math.abs(sr - r) + Math.abs(sc - c) === 1) {
+      // 交换
+      [m3Board[sr][sc], m3Board[r][c]] = [m3Board[r][c], m3Board[sr][sc]];
+      const matches = checkMatches();
+      if (matches.length > 0) {
+        selectedTile = null;
+        isProcessing = true;
+        renderBoard();
+        processMatches(matches);
+      } else {
+        // 换回来
+        [m3Board[sr][sc], m3Board[r][c]] = [m3Board[r][c], m3Board[sr][sc]];
+        selectedTile = null;
+        renderBoard();
+      }
+    } else {
+      selectedTile = [r, c];
+      renderBoard();
+      highlightTile(r, c);
     }
   } else {
-    lockBoard = true;
-    setTimeout(() => {
-      card1.classList.remove('flipped'); card1.innerText = '';
-      card2.classList.remove('flipped'); card2.innerText = '';
-      flippedCards = [];
-      lockBoard = false;
-    }, 800);
+    selectedTile = [r, c];
+    renderBoard();
+    highlightTile(r, c);
+  }
+}
+
+function highlightTile(r, c) {
+  const boardEl = document.getElementById('match3Board');
+  const index = r * COLS + c;
+  if (boardEl.children[index]) {
+    boardEl.children[index].classList.add('selected');
+  }
+}
+
+function checkMatches() {
+  let matches = [];
+  // 横向
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS - 2; c++) {
+      let fruit = m3Board[r][c];
+      if (!fruit) continue;
+      let len = 1;
+      while (c + len < COLS && m3Board[r][c + len] === fruit) len++;
+      if (len >= 3) {
+        for (let i = 0; i < len; i++) matches.push([r, c + i]);
+        c += len - 1;
+      }
+    }
+  }
+  // 纵向
+  for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < ROWS - 2; r++) {
+      let fruit = m3Board[r][c];
+      if (!fruit) continue;
+      let len = 1;
+      while (r + len < ROWS && m3Board[r + len][c] === fruit) len++;
+      if (len >= 3) {
+        for (let i = 0; i < len; i++) matches.push([r + i, c]);
+        r += len - 1;
+      }
+    }
+  }
+  // 去重
+  return Array.from(new Set(matches.map(m => m.join(',')))).map(s => s.split(',').map(Number));
+}
+
+function processMatches(matches) {
+  m3Score += matches.length * 10;
+  document.getElementById('m3Score').innerText = m3Score;
+
+  // 标记消除
+  matches.forEach(([r, c]) => {
+    m3Board[r][c] = null;
+    const index = r * COLS + c;
+    const tile = document.getElementById('match3Board').children[index];
+    if (tile) tile.classList.add('matched');
+  });
+
+  // 等待动画后下落和补充
+  setTimeout(() => {
+    applyGravity();
+    refillBoard();
+    renderBoard();
+    
+    // 连锁反应
+    const newMatches = checkMatches();
+    if (newMatches.length > 0) {
+      processMatches(newMatches);
+    } else {
+      isProcessing = false;
+      selectedTile = null;
+    }
+  }, 300);
+}
+
+function applyGravity() {
+  for (let c = 0; c < COLS; c++) {
+    let emptyRow = ROWS - 1;
+    for (let r = ROWS - 1; r >= 0; r--) {
+      if (m3Board[r][c] !== null) {
+        [m3Board[emptyRow][c], m3Board[r][c]] = [m3Board[r][c], m3Board[emptyRow][c]];
+        emptyRow--;
+      }
+    }
+  }
+}
+
+function refillBoard() {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (m3Board[r][c] === null) {
+        m3Board[r][c] = FRUITS[Math.floor(Math.random() * FRUITS.length)];
+      }
+    }
   }
 }
 
 // ================== 5. 初始化 ==================
 window.onload = function() {
   initMusicPlayer();
-  initGame();
+  initMatch3();
 };
 </script>
 </body>
