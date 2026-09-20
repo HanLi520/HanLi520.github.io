@@ -289,6 +289,44 @@ let m3Score = 0;
 let selectedTile = null;
 let isProcessing = false;
 
+// 音效合成器 (Web Audio API)
+let audioCtx = null;
+function playSound(type, comboLevel = 1) {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    const now = audioCtx.currentTime;
+    gain.gain.setValueAtTime(0.1, now);
+
+    if (type === 'swap') {
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(400, now);
+      osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+      osc.start(now); osc.stop(now + 0.1);
+    } else if (type === 'match') {
+      // 消除音，连击越高音调越清脆
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(800 * (1 + (comboLevel - 1) * 0.1), now);
+      osc.frequency.exponentialRampToValueAtTime(1200 * (1 + (comboLevel - 1) * 0.1), now + 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+      osc.start(now); osc.stop(now + 0.15);
+    } else if (type === 'error') {
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(200, now);
+      osc.frequency.linearRampToValueAtTime(100, now + 0.15);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+      osc.start(now); osc.stop(now + 0.15);
+    }
+  } catch (e) { console.warn('音效生成失败', e); }
+}
+
 function initMatch3() {
   m3Board = [];
   m3Score = 0;
@@ -296,7 +334,6 @@ function initMatch3() {
   isProcessing = false;
   document.getElementById('m3Score').innerText = '0';
   
-  // 生成没有初始三连的棋盘
   do {
     m3Board = [];
     for (let r = 0; r < ROWS; r++) {
@@ -339,15 +376,15 @@ function handleTileClick(r, c) {
   
   if (selectedTile) {
     const [sr, sc] = selectedTile;
-    // 点击同一个取消
     if (sr === r && sc === c) {
       selectedTile = null;
       renderBoard();
       return;
     }
-    // 判断是否相邻
     if (Math.abs(sr - r) + Math.abs(sc - c) === 1) {
-      // 交换
+      // 播放交换音效
+      playSound('swap');
+      
       [m3Board[sr][sc], m3Board[r][c]] = [m3Board[r][c], m3Board[sr][sc]];
       const matches = checkMatches();
       if (matches.length > 0) {
@@ -356,7 +393,7 @@ function handleTileClick(r, c) {
         renderBoard();
         processMatches(matches);
       } else {
-        // 换回来
+        playSound('error'); // 错误音效
         [m3Board[sr][sc], m3Board[r][c]] = [m3Board[r][c], m3Board[sr][sc]];
         selectedTile = null;
         renderBoard();
@@ -383,7 +420,6 @@ function highlightTile(r, c) {
 
 function checkMatches() {
   let matches = [];
-  // 横向
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS - 2; c++) {
       let fruit = m3Board[r][c];
@@ -396,7 +432,6 @@ function checkMatches() {
       }
     }
   }
-  // 纵向
   for (let c = 0; c < COLS; c++) {
     for (let r = 0; r < ROWS - 2; r++) {
       let fruit = m3Board[r][c];
@@ -409,7 +444,6 @@ function checkMatches() {
       }
     }
   }
-  // 去重
   return Array.from(new Set(matches.map(m => m.join(',')))).map(s => s.split(',').map(Number));
 }
 
@@ -417,7 +451,9 @@ function processMatches(matches) {
   m3Score += matches.length * 10;
   document.getElementById('m3Score').innerText = m3Score;
 
-  // 标记消除
+  // 播放消除音效，根据匹配数量决定音调
+  playSound('match', matches.length);
+
   matches.forEach(([r, c]) => {
     m3Board[r][c] = null;
     const index = r * COLS + c;
@@ -425,13 +461,11 @@ function processMatches(matches) {
     if (tile) tile.classList.add('matched');
   });
 
-  // 等待动画后下落和补充
   setTimeout(() => {
     applyGravity();
     refillBoard();
     renderBoard();
     
-    // 连锁反应
     const newMatches = checkMatches();
     if (newMatches.length > 0) {
       processMatches(newMatches);
