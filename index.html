@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>韩立的后宫 🎀</title>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- 引入国内 CDN 的 Supabase 库，避免被墙 -->
+<script src="https://cdn.bootcdn.net/ajax/libs/supabase-js/2.45.4/supabase.min.js"></script>
 <style>
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
   body{font-family:"PingFang SC",sans-serif;background:#121212;color:#e0e0e0;height:100vh;overflow:hidden;display:flex;flex-direction:column;}
@@ -33,7 +34,7 @@
   .chat-messages{flex:1;overflow-y:auto;padding:15px;display:flex;flex-direction:column;gap:10px;}
   .msg{padding:10px 14px;border-radius:18px;font-size:14px;max-width:85%;word-break:break-word;background:#333;}
   .msg.me{align-self:flex-end;background:#a855f7;color:#fff;}
-  .msg-bubble img{max-width:100%;border-radius:8px;}
+  .msg img{max-width:100%;border-radius:8px;display:block;}
   .chat-input-area{display:flex;gap:6px;padding:10px;border-top:1px solid #333;background:#1e1e1e;align-items:center;}
   .chat-input-area input[type="text"]{flex:1;margin-bottom:0;border-radius:99px;}
   .chat-icon-btn{background:none;border:none;font-size:22px;color:#888;cursor:pointer;padding:0 5px;}
@@ -45,6 +46,7 @@
 </style>
 </head>
 <body>
+
 <!-- 记账 -->
 <div id="page-account" class="page active">
   <h1>📝 记账本</h1>
@@ -126,9 +128,10 @@
   <div class="tab-item" data-tab="chat" onclick="switchTab('chat', this)">聊天</div>
   <div class="tab-item" data-tab="profile" onclick="switchTab('profile', this)">我的</div>
 </div>
+
 <script>
-// ================== 1. 优先绑定页面切换逻辑（防止点击失效） ==================
-function switchTab(tabName, element) {
+// ================== 1. 页面切换（绝对优先，不受网络影响） ==================
+window.switchTab = function(tabName, element) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + tabName).classList.add('active');
   document.querySelectorAll('.tab-item').forEach(item => item.classList.remove('active'));
@@ -148,7 +151,7 @@ document.querySelector('body').addEventListener('touchend', e => {
   }
 }, {passive: true});
 
-// ================== 2. 初始化 Supabase（带防卡死保护） ==================
+// ================== 2. 初始化 Supabase（带防崩溃保护） ==================
 let supabase = null;
 try {
   const supabaseUrl = 'https://snzuhtakhmvexwangvhn.supabase.co';
@@ -156,49 +159,41 @@ try {
   if (window.supabase) {
     supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
   } else {
-    console.warn("Supabase 库加载失败，请检查网络");
+    console.warn("Supabase 库未加载成功，请检查网络");
   }
-} catch (e) {
-  console.error("Supabase 初始化失败", e);
-}
+} catch (e) { console.error("Supabase 初始化失败", e); }
 
-// 为当前设备生成一个随机访客名字
-let myName = localStorage.getItem('myChatName');
-if (!myName) {
-  myName = '用户' + Math.floor(Math.random() * 1000);
-  localStorage.setItem('myChatName', myName);
-}
+let myName = localStorage.getItem('myChatName') || '用户' + Math.floor(Math.random() * 1000);
+localStorage.setItem('myChatName', myName);
 
-// ================== 3. 记账功能 ==================
+// ================== 3. 记账功能（云同步） ==================
 document.getElementById('recordDate').value = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
 
-function updatePlaceholder() {
+window.updatePlaceholder = function() {
   document.getElementById('recordItem').placeholder = document.getElementById('typeExpense').checked ? "输入用途（如：买菜）" : "输入来源（如：工资）";
 }
 
-async function addRecord() {
-  if (!supabase) { alert('网络连接失败，无法保存到云端，请检查网络后刷新'); return; }
+window.addRecord = async function() {
+  if (!supabase) { alert('网络未连接，请切换网络（Wi-Fi/流量）后刷新页面再试'); return; }
   const dateStr = document.getElementById('recordDate').value;
   const item = document.getElementById('recordItem').value.trim();
   const amount = parseFloat(document.getElementById('recordAmount').value);
   const type = document.querySelector('input[name="recordType"]:checked').value;
   if (!dateStr || !item || isNaN(amount) || amount <= 0) { alert('请填写完整！'); return; }
-  
   const date = dateStr.replace('T', ' ').slice(0, 16);
   await supabase.from('records').insert([{ date, item, amount, type }]);
-  
   document.getElementById('recordItem').value = ''; document.getElementById('recordAmount').value = '';
-  loadRecords();
+  window.loadRecords();
 }
 
-async function deleteRecord(id) {
+window.deleteRecord = async function(id) {
   if (!supabase) return;
   if (!confirm('确定删除？')) return;
   await supabase.from('records').delete().eq('id', id);
-  loadRecords();
+  window.loadRecords();
 }
 
-async function loadRecords() {
+window.loadRecords = async function() {
   if (!supabase) return;
   const { data: records, error } = await supabase.from('records').select('*').order('date', { ascending: false });
   if (error) return;
@@ -209,12 +204,10 @@ async function loadRecords() {
   });
   document.getElementById('totalExpense').innerText = tExp.toFixed(2);
   document.getElementById('totalIncome').innerText = tInc.toFixed(2);
-
   const mL = document.getElementById('monthlyList'); mL.innerHTML = '';
   const sortedM = Object.keys(mMap).sort().reverse();
   if (sortedM.length === 0) mL.innerHTML = '<div style="font-size:13px;color:#888;text-align:center;">暂无记录</div>';
   else sortedM.forEach(m => { mL.innerHTML += '<div style="display:flex;justify-content:space-between;font-size:13px;background:#252525;padding:8px 12px;border-radius:8px;margin-bottom:5px;"><span>' + m + '</span><span>支出 ¥' + mMap[m].e.toFixed(2) + ' / 收入 ¥' + mMap[m].i.toFixed(2) + '</span></div>'; });
-
   const rL = document.getElementById('recordList'); rL.innerHTML = '';
   if (records.length === 0) rL.innerHTML = '<div style="text-align:center;color:#888;font-size:13px;">还没有记录哦～</div>';
   else records.forEach(r => {
@@ -222,30 +215,30 @@ async function loadRecords() {
   });
 }
 
-// ================== 4. 聊天功能 ==================
+// ================== 4. 聊天功能（云同步） ==================
 const chatInput = document.getElementById('chatInput');
 const actionBtn = document.getElementById('actionBtn');
 
-function toggleSendBtn() {
+window.toggleSendBtn = function() {
   if (chatInput.value.trim() !== '') { actionBtn.innerHTML = '发送'; actionBtn.style.color = '#a855f7'; actionBtn.style.fontSize = '14px'; actionBtn.style.fontWeight = 'bold'; }
   else { actionBtn.innerHTML = '🎤'; actionBtn.style.color = '#888'; actionBtn.style.fontSize = '22px'; actionBtn.style.fontWeight = 'normal'; }
 }
 
-function handleAction() {
-  if (chatInput.value.trim() !== '') { sendChatText(); }
+window.handleAction = function() {
+  if (chatInput.value.trim() !== '') { window.sendChatText(); }
   else { alert('语音功能需要后端支持～'); }
 }
 
-async function sendChatText() {
-  if (!supabase) { alert('网络连接失败，无法发送，请检查网络后刷新'); return; }
+window.sendChatText = async function() {
+  if (!supabase) { alert('网络未连接，无法发送消息'); return; }
   const text = chatInput.value.trim();
   if (!text) return;
-  chatInput.value = ''; toggleSendBtn();
+  chatInput.value = ''; window.toggleSendBtn();
   await supabase.from('messages').insert([{ content: text, username: myName }]);
 }
 
-function sendChatImage(file) {
-  if (!supabase) { alert('网络连接失败，无法发送图片'); return; }
+window.sendChatImage = function(file) {
+  if (!supabase) { alert('网络未连接，无法发送图片'); return; }
   if (!file) return;
   const reader = new FileReader();
   reader.onload = async (e) => {
@@ -254,7 +247,7 @@ function sendChatImage(file) {
   reader.readAsDataURL(file);
 }
 
-function appendMessage(content, isMe) {
+window.appendMessage = function(content, isMe) {
   const div = document.createElement('div');
   div.className = 'msg ' + (isMe ? 'me' : '');
   div.innerHTML = content;
@@ -262,23 +255,19 @@ function appendMessage(content, isMe) {
   document.getElementById('chatMessages').scrollTop = document.getElementById('chatMessages').scrollHeight;
 }
 
-async function loadChatHistory() {
+window.loadChatHistory = async function() {
   if (!supabase) return;
   const { data: msgs, error } = await supabase.from('messages').select('*').order('created_at', { ascending: true });
   if (error) return;
   document.getElementById('chatMessages').innerHTML = '';
-  msgs.forEach(m => {
-    const isMe = (m.username === myName);
-    appendMessage(m.content, isMe);
-  });
+  msgs.forEach(m => { window.appendMessage(m.content, m.username === myName); });
 }
 
-function subscribeToChat() {
+window.subscribeToChat = function() {
   if (!supabase) return;
   supabase.channel('public:messages').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
     const m = payload.new;
-    const isMe = (m.username === myName);
-    if (!isMe) { appendMessage(m.content, false); }
+    if (m.username !== myName) { window.appendMessage(m.content, false); }
   }).subscribe();
 }
 
@@ -291,12 +280,11 @@ document.querySelectorAll('input').forEach(input => {
 
 // ================== 6. 初始化 ==================
 window.onload = function() {
-  loadRecords();
-  loadChatHistory();
-  subscribeToChat();
-  updatePlaceholder();
+  window.loadRecords();
+  window.loadChatHistory();
+  window.subscribeToChat();
+  window.updatePlaceholder();
 }
 </script>
 </body>
 </html>
-
