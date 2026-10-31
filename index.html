@@ -180,19 +180,15 @@ const targetWebsite = "";
 // 把 url 替换成网站上实际存在的音乐文件路径。
 const playlist = [
   { title:"天亮以前说再见", artist:"曲肖冰", url:"5_6073492341077837047.mp3" },
-  { title:"晴天", artist:"周杰伦", url:"qingtian.mp3" },
-  { title:"七里香", artist:"周杰伦", url:"qilixiang.mp3" },
-  { title:"稻香", artist:"周杰伦", url:"daoxiang.mp3" },
-  { title:"夜曲", artist:"周杰伦", url:"yequ.mp3" },
-  { title:"花海", artist:"周杰伦", url:"huahai.mp3" },
+  { title:"意外", artist:"薛之谦", url:"yiwai.mp3" },
   { title:"若月亮没来(Live)", artist:"宝石Gem", url:"ruoyueliang_live.mp3" },
   { title:"雨爱", artist:"杨丞琳", url:"yuai.mp3" },
   { title:"我怀念的", artist:"孙燕姿", url:"wohuainiande.mp3" },
-  { title:"不凡2024", artist:"王铮亮《凡人修仙传》", url:"bufan2024.mp3" },
-  { title:"少年不凡", artist:"刘美麟《凡人修仙传》", url:"shaonianbufan.mp3" },
-  { title:"归期", artist:"钱润玉《凡人修仙传》", url:"guiqi.mp3" },
-  { title:"沧海飞尘", artist:"银临《凡人修仙传》", url:"canghai feichen.mp3" },
-  { title:"凡人", artist:"段奥娟《凡人修仙传》", url:"fanren.mp3" },
+  { title:"不凡2024", artist:"王铮亮", url:"bufan2024.mp3" },
+  { title:"少年不凡", artist:"刘美麟", url:"shaonianbufan.mp3" },
+  { title:"归期", artist:"钱润玉", url:"guiqi.mp3" },
+  { title:"沧海飞尘", artist:"银临", url:"canghai feichen.mp3" },
+  { title:"凡人", artist:"段奥娟", url:"fanren.mp3" },
 ];
 
 const audio = document.getElementById("audioPlayer");
@@ -228,12 +224,25 @@ function updateActiveRows() {
   });
 }
 
+function updateMediaSession(song) {
+  // 让支持 Media Session 的手机系统识别当前歌曲及锁屏媒体控件。
+  if (!("mediaSession" in navigator)) return;
+  if ("MediaMetadata" in window) {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: song.title,
+      artist: song.artist,
+      album: "韩立的音乐库"
+    });
+  }
+}
+
 function selectSong(index, shouldPlay) {
   currentIndex = (index + playlist.length) % playlist.length;
   const song = playlist[currentIndex];
   audio.src = song.url;
   playerSongName.textContent = song.title;
   playerArtist.textContent = song.artist;
+  updateMediaSession(song);
   updateActiveRows();
   if (shouldPlay) playMusic();
 }
@@ -274,6 +283,14 @@ audio.onended = () => {
   if (!playlist.length) return;
   nextSong();
 };
+
+// 绑定系统锁屏媒体控件；部分手机/浏览器不支持这些 action，故逐项保护。
+if ("mediaSession" in navigator && navigator.mediaSession.setActionHandler) {
+  try { navigator.mediaSession.setActionHandler("play", () => playMusic()); } catch (_) {}
+  try { navigator.mediaSession.setActionHandler("pause", () => audio.pause()); } catch (_) {}
+  try { navigator.mediaSession.setActionHandler("nexttrack", () => nextSong()); } catch (_) {}
+  try { navigator.mediaSession.setActionHandler("previoustrack", () => prevSong()); } catch (_) {}
+}
 
 const modal = document.getElementById("announcementModal");
 let modalClosing = false;
@@ -325,3 +342,4 @@ playMusic();
 </script>
 </body>
 </html>
+
