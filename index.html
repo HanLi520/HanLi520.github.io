@@ -184,6 +184,7 @@ const playlist = [
   { title:"若月亮没来(Live)", artist:"宝石Gem", url:"ruoyueliang_live.mp3" },
   { title:"雨爱", artist:"杨丞琳", url:"yuai.mp3" },
   { title:"我怀念的", artist:"孙燕姿", url:"wohuainiande.mp3" },
+  { title:"出现又离开", artist:"梁博", url:"chuxianyoulikai.mp3" },
   { title:"不凡2024", artist:"王铮亮", url:"bufan2024.mp3" },
   { title:"少年不凡", artist:"刘美麟", url:"shaonianbufan.mp3" },
   { title:"归期", artist:"钱润玉", url:"guiqi.mp3" },
@@ -225,7 +226,7 @@ function updateActiveRows() {
 }
 
 function updateMediaSession(song) {
-  // 让支持 Media Session 的手机系统识别当前歌曲及锁屏媒体控件。
+  // 更新系统媒体信息；浏览器支持时可用于锁屏媒体卡片。
   if (!("mediaSession" in navigator)) return;
   if ("MediaMetadata" in window) {
     navigator.mediaSession.metadata = new MediaMetadata({
@@ -234,6 +235,13 @@ function updateMediaSession(song) {
       album: "韩立的音乐库"
     });
   }
+}
+
+function updateMediaPlaybackState(state) {
+  if (!("mediaSession" in navigator)) return;
+  try {
+    navigator.mediaSession.playbackState = state;
+  } catch (_) {}
 }
 
 function selectSong(index, shouldPlay) {
@@ -255,12 +263,18 @@ function updatePlayButton(isPlaying = !audio.paused) {
 }
 
 function playMusic() {
-  audio.play().then(() => {
+  return audio.play().then(() => {
+    updateMediaPlaybackState("playing");
     updatePlayButton(true);
     updateActiveRows();
-  }).catch(() => {
+    return true;
+  }).catch((error) => {
+    updateMediaPlaybackState("paused");
     updatePlayButton(false);
     updateActiveRows();
+    // 自动播放可能被浏览器策略拒绝；记录原因，避免未处理的 Promise 异常。
+    console.warn("播放请求未成功：", error);
+    return false;
   });
 }
 
@@ -275,14 +289,35 @@ function prevSong() { selectSong(currentIndex - 1, true); }
 playBtn.addEventListener("click", toggleMusic);
 document.getElementById("nextBtn").addEventListener("click", nextSong);
 document.getElementById("prevBtn").addEventListener("click", prevSong);
-audio.addEventListener("play", () => { updatePlayButton(true); updateActiveRows(); });
-audio.addEventListener("pause", () => { updatePlayButton(false); updateActiveRows(); });
-// 当前歌曲播放结束后，自动切换并开始播放下一首。
-// 使用 onended 明确绑定，避免结束事件监听器在其他修改中重复或遗漏。
-audio.onended = () => {
-  if (!playlist.length) return;
-  nextSong();
-};
+audio.addEventListener("play", () => {
+  updateMediaPlaybackState("playing");
+  updatePlayButton(true);
+  updateActiveRows();
+});
+audio.addEventListener("pause", () => {
+  updateMediaPlaybackState("paused");
+  updatePlayButton(false);
+  updateActiveRows();
+});
+
+// 歌曲结束时推进歌单并尝试继续播放。
+// 用锁避免同一次结束事件导致重复跳歌。
+let advancingAfterEnded = false;
+audio.addEventListener("ended", async () => {
+  if (!playlist.length || advancingAfterEnded) return;
+  advancingAfterEnded = true;
+
+  try {
+    const nextIndex = (currentIndex + 1) % playlist.length;
+    selectSong(nextIndex, false);
+    await playMusic();
+  } catch (error) {
+    // 浏览器可能在锁屏/后台拒绝下一首的播放请求。
+    console.warn("自动播放下一首失败：", error);
+  } finally {
+    advancingAfterEnded = false;
+  }
+});
 
 // 绑定系统锁屏媒体控件；部分手机/浏览器不支持这些 action，故逐项保护。
 if ("mediaSession" in navigator && navigator.mediaSession.setActionHandler) {
@@ -342,4 +377,5 @@ playMusic();
 </script>
 </body>
 </html>
+
 
